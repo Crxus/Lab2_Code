@@ -364,28 +364,31 @@ get_pte(pde_t *pgdir, uintptr_t la, bool create) {
 //My add 
 //PTE_P=0x001 To an adress x, x&PTE_P can confirm whether x exists.
 //get pde_t 
+
       pde_t *theFirst = &pgdir[PDX(la)];//get the index in pgdir using la's high 10
       //*theFirst is the index of the first PT(page dictionary, PD), and point to a PT
-      if((*theFirst & PTE_P)==0x0)
+      if((*theFirst & PTE_P)==0x0)//Index not exist
       {
            struct Page* TheNewPage;
            if(!create||(TheNewPage=alloc_page()) == NULL)//pmm.h difine alloc_page=alloc_pages(1) if can not create a new page or there is no free space
            {
                 return NULL;
            }
-           set_page_ref(TheNewPage,1);//TheNewPage has been refrerenced by a page
+           set_page_ref(TheNewPage,1);//TheNewPage has been refrerenced by a index
            //then set all bits of TheNewPage to 0(According to the guidence),because it has not been referenced by any other pages
-           uintptr_t Get=page2pa(TheNewPage);//Get the address of TheNewPage
+           uintptr_t Get=page2pa(TheNewPage);//Get the physical address of TheNewPage(like index 0)
+           //difine of page2pa is in pmm.h line 83
            //KADDR returns a vitural address -- it's because the index of the PT is vitual address  We set this index of PT to 0 because it hasn't been referenced
            memset(KADDR(Get),0,PGSIZE);
            //set the connect of 1st and 2nd page table(or page ditctionary to page table
-           *theFirst= (Get) | PTE_P | PTE_W | PTE_U;
-//!!!!!!!!!question here!!!
+           *theFirst= (Get&~0x0FFF) | PTE_P | PTE_W | PTE_U;
+//!!!!!!!!!question here!!!  Get already got the Physical address with lower 12 bits are all 0.
       }
       //PDE_ADDR-->mmu.h,line 219, To get the value of the index. KADDR-->get the vitual address(lower 12 bits are all 0)
       // Just as the PDX ,PTX get the middle 10 bits of the la (13:22) 
-      // We get the address of the index of PD(it's the address of a PT) ,and use (pte_t) change its type to a point ,take it as a list, so that we can use PTX(la) to find the address of the index of PT, to change la to pa(Sum to the offset)
+      // We get the address of the index of PD(it's the (p)address of a PT) ,and use (pte_t) change its type to a pointer ,take it as a list, so that we can use PTX(la) to find the address of the index of PT, to change la to pa(Sum to the offset)
       return &((pte_t *)KADDR(PDE_ADDR(*theFirst)))[PTX(la)]; //???
+      //Get the start (vitual)address of a PT, use [PTX(la)] to find the index excursion
 }
 
 //get_page - get related Page struct for linear address la using PDT pgdir
@@ -437,7 +440,7 @@ page_remove_pte(pde_t *pgdir, uintptr_t la, pte_t *ptep) {
       if ((*ptep & PTE_P)!=0x0)
       {
             //check the index in pte, it's ref--
-            struct Page* IndexPage=pte2page(*ptep);
+            struct Page* IndexPage=pte2page(*ptep);//lead to the value of the page
             // the difine of page_ref_dec is in pmm.h ,line 135, returns an int value(page->ref)
             if(page_ref_dec(IndexPage)==0)
             {
